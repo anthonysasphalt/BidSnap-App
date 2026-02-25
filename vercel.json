@@ -5,12 +5,11 @@
   "installCommand": "pnpm install",
   "framework": null,
   "functions": {
-    "api/index.ts": {
+    "api/index.js": {
       "maxDuration": 30,
-      "memory": 1024,
-      "includeFiles": "server/**,shared/**,drizzle/**"
+      "memory": 1024
     },
-    "api/jobber/callback.ts": {
+    "api/jobber/callback.js": {
       "maxDuration": 30
     }
   },

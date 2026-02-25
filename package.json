@@ -7,7 +7,7 @@
   },
   "license": "MIT",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node esbuild-api.mjs",
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "db:push": "drizzle-kit generate && drizzle-kit migrate"
