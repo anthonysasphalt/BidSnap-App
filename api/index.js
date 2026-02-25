@@ -43893,7 +43893,7 @@ var require_mysql2 = __commonJS({
   }
 });
 
-// api/index.ts
+// server/api-handler.ts
 var import_express = __toESM(require_express2(), 1);
 
 // node_modules/@trpc/server/dist/codes-DagpWZLc.mjs
@@ -67078,7 +67078,7 @@ async function createContext(opts) {
   };
 }
 
-// api/index.ts
+// server/api-handler.ts
 var app = null;
 function getApp() {
   if (!app) {

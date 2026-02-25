@@ -2,7 +2,7 @@ import { build } from "esbuild";
 
 // Bundle the main API handler
 await build({
-  entryPoints: ["api/index.ts"],
+  entryPoints: ["server/api-handler.ts"],
   bundle: true,
   platform: "node",
   target: "node18",
@@ -16,7 +16,7 @@ await build({
 
 // Bundle the Jobber callback handler
 await build({
-  entryPoints: ["api/jobber/callback.ts"],
+  entryPoints: ["server/jobber-callback.ts"],
   bundle: true,
   platform: "node",
   target: "node18",

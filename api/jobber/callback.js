@@ -461,7 +461,7 @@ var require_cli_options = __commonJS({
   );
 })();
 
-// api/jobber/callback.ts
+// server/jobber-callback.ts
 var JOBBER_CLIENT_ID = process.env.JOBBER_CLIENT_ID;
 var JOBBER_CLIENT_SECRET = process.env.JOBBER_CLIENT_SECRET;
 var JOBBER_TOKEN_ENDPOINT = "https://api.getjobber.com/api/oauth/token";
