@@ -1,15 +1,36 @@
 /**
  * Vercel Serverless Function Handler
  * 
- * Uses lazy-loading to avoid module-level crashes.
- * Health check has zero dependencies — always works even if DB is down.
+ * Static imports so Vercel's bundler (nft) traces and includes all server files.
+ * Health check is dependency-free. Express app creation is wrapped in try/catch.
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import express from "express";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import { appRouter } from "../server/routers";
+import { createContext } from "../server/_core/context";
 
-let app: any = null;
+let app: express.Application | null = null;
+
+function getApp(): express.Application {
+  if (!app) {
+    app = express();
+    app.use(express.json({ limit: "50mb" }));
+    app.use(express.urlencoded({ limit: "50mb", extended: true }));
+    
+    app.use(
+      "/api/trpc",
+      createExpressMiddleware({
+        router: appRouter,
+        createContext,
+      })
+    );
+  }
+  return app;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Health check — zero dependencies, always works
+  // Health check — no Express needed
   if (req.url === "/api/health" || req.url === "/api/health/") {
     return res.status(200).json({ 
       status: "ok", 
@@ -22,30 +43,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    if (!app) {
-      // Lazy-load everything inside try/catch so we see the actual error
-      const express = (await import("express")).default;
-      const { createExpressMiddleware } = await import("@trpc/server/adapters/express");
-      const { appRouter } = await import("../server/routers");
-      const { createContext } = await import("../server/_core/context");
-
-      app = express();
-      app.use(express.json({ limit: "50mb" }));
-      app.use(express.urlencoded({ limit: "50mb", extended: true }));
-      
-      app.use(
-        "/api/trpc",
-        createExpressMiddleware({
-          router: appRouter,
-          createContext,
-        })
-      );
-    }
-
-    // Forward request to Express
+    const expressApp = getApp();
+    
     return new Promise<void>((resolve) => {
-      app(req, res, () => {
-        // If Express doesn't handle it, return 404
+      expressApp(req as any, res as any, () => {
         if (!res.writableEnded) {
           res.status(404).json({ error: "Not found" });
         }
@@ -57,7 +58,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({
       error: "Internal server error",
       message: error.message || String(error),
-      stack: process.env.NODE_ENV !== "production" ? error.stack : undefined,
     });
   }
 }
