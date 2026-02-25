@@ -31,7 +31,7 @@ function createApp(): express.Application {
   );
 
   // Health check
-  newApp.get("/api/health", (_req: Request, res: Response) => {
+  newApp.get("/api/health", (_req: Request, res: any) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
