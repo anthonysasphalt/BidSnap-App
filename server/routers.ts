@@ -24,7 +24,7 @@ const ADMIN_SESSION_KEY = "bidsnap_admin_session";
 
 // Helper to extract session ID from cookie header
 function getSessionIdFromCookie(req: any): string | null {
-  const cookies = req.headers.cookie || "";
+  const cookies = req.headers?.cookie || "";
   const match = cookies.match(new RegExp(`${ADMIN_SESSION_KEY}=([^;\\s]+)`));
   return match ? decodeURIComponent(match[1]) : null;
 }
@@ -50,7 +50,7 @@ export const appRouter = router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      (ctx.res as any).clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
   }),
@@ -75,10 +75,12 @@ export const appRouter = router({
         await createAdminSession(sessionId, username);
 
         // Set persistent cookie
-        ctx.res.cookie(ADMIN_SESSION_KEY, sessionId, {
+        const req = ctx.req as any;
+        const res = ctx.res as any;
+        res.cookie(ADMIN_SESSION_KEY, sessionId, {
           httpOnly: true,
-          secure: ctx.req.protocol === "https",
-          sameSite: ctx.req.protocol === "https" ? "none" : "lax",
+          secure: req.protocol === "https",
+          sameSite: req.protocol === "https" ? "none" : "lax",
           maxAge: 24 * 60 * 60 * 1000, // 24 hours
           path: "/",
         });
@@ -98,10 +100,12 @@ export const appRouter = router({
       if (sessionId) {
         await deleteAdminSession(sessionId);
       }
-      ctx.res.clearCookie(ADMIN_SESSION_KEY, {
+      const req = ctx.req as any;
+      const res = ctx.res as any;
+      res.clearCookie(ADMIN_SESSION_KEY, {
         httpOnly: true,
-        secure: ctx.req.protocol === "https",
-        sameSite: ctx.req.protocol === "https" ? "none" : "lax",
+        secure: req.protocol === "https",
+        sameSite: req.protocol === "https" ? "none" : "lax",
         path: "/",
       });
       return { success: true };
@@ -206,12 +210,13 @@ export const appRouter = router({
         }
 
         // Record the view
+        const req = ctx.req as any;
         await incrementDemoLinkViews(input.token);
         await recordLinkView({
           linkId: link.id,
           viewedAt: now,
-          ipAddress: (ctx.req.headers["x-forwarded-for"] as string)?.split(",")[0] || ctx.req.socket?.remoteAddress || null,
-          userAgent: ctx.req.headers["user-agent"] || null,
+          ipAddress: (req.headers?.["x-forwarded-for"] as string)?.split(",")[0] || req.socket?.remoteAddress || null,
+          userAgent: req.headers?.["user-agent"] || null,
         });
 
         // Check if this was the last view

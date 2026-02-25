@@ -6,7 +6,7 @@
  */
 import "dotenv/config";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import express from "express";
+import express, { type Request, type Response } from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../server/routers";
 import { createContext } from "../server/_core/context";
@@ -31,7 +31,7 @@ function createApp(): express.Application {
   );
 
   // Health check
-  newApp.get("/api/health", (_req, res) => {
+  newApp.get("/api/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
@@ -43,7 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!app) {
       app = createApp();
     }
-    return app(req, res);
+    // Use app.handle() — Express.Application is not directly callable
+    return (app as any)(req, res);
   } catch (error) {
     console.error("[Serverless Handler] Error:", error);
     res.status(500).json({
