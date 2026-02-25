@@ -1,55 +1,63 @@
 /**
  * Vercel Serverless Function Handler
- *
- * Exports a default handler compatible with @vercel/node.
- * Creates and configures an Express app with tRPC routes.
+ * 
+ * Uses lazy-loading to avoid module-level crashes.
+ * Health check has zero dependencies — always works even if DB is down.
  */
-import "dotenv/config";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import express, { type Request, type Response } from "express";
-import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { appRouter } from "../server/routers";
-import { createContext } from "../server/_core/context";
 
-// Create and configure the Express app once
-let app: express.Application | null = null;
-
-function createApp(): express.Application {
-  const newApp = express();
-
-  // Body parser
-  newApp.use(express.json({ limit: "50mb" }));
-  newApp.use(express.urlencoded({ limit: "50mb", extended: true }));
-
-  // tRPC API
-  newApp.use(
-    "/api/trpc",
-    createExpressMiddleware({
-      router: appRouter,
-      createContext,
-    })
-  );
-
-  // Health check
-  newApp.get("/api/health", (_req: Request, res: any) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
-  });
-
-  return newApp;
-}
+let app: any = null;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Health check — zero dependencies, always works
+  if (req.url === "/api/health" || req.url === "/api/health/") {
+    return res.status(200).json({ 
+      status: "ok", 
+      timestamp: new Date().toISOString(),
+      env: {
+        hasDbUrl: !!process.env.DATABASE_URL,
+        nodeEnv: process.env.NODE_ENV || "not set",
+      }
+    });
+  }
+
   try {
     if (!app) {
-      app = createApp();
+      // Lazy-load everything inside try/catch so we see the actual error
+      const express = (await import("express")).default;
+      const { createExpressMiddleware } = await import("@trpc/server/adapters/express");
+      const { appRouter } = await import("../server/routers");
+      const { createContext } = await import("../server/_core/context");
+
+      app = express();
+      app.use(express.json({ limit: "50mb" }));
+      app.use(express.urlencoded({ limit: "50mb", extended: true }));
+      
+      app.use(
+        "/api/trpc",
+        createExpressMiddleware({
+          router: appRouter,
+          createContext,
+        })
+      );
     }
-    // Use app.handle() — Express.Application is not directly callable
-    return (app as any)(req, res);
-  } catch (error) {
-    console.error("[Serverless Handler] Error:", error);
-    res.status(500).json({
+
+    // Forward request to Express
+    return new Promise<void>((resolve) => {
+      app(req, res, () => {
+        // If Express doesn't handle it, return 404
+        if (!res.writableEnded) {
+          res.status(404).json({ error: "Not found" });
+        }
+        resolve();
+      });
+    });
+  } catch (error: any) {
+    console.error("[Serverless] Fatal error:", error);
+    return res.status(500).json({
       error: "Internal server error",
-      message: error instanceof Error ? error.message : String(error),
+      message: error.message || String(error),
+      stack: process.env.NODE_ENV !== "production" ? error.stack : undefined,
     });
   }
 }
