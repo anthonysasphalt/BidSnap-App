@@ -12,6 +12,8 @@ import Walkthrough from "./pages/Walkthrough";
 import SecurePlayer from "./pages/SecurePlayer";
 import AdminPanel from "./pages/AdminPanel";
 import ProspectView from "./pages/ProspectView";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 
 function Router() {
   return (
@@ -22,6 +24,8 @@ function Router() {
       <Route path="/watch/:token" component={SecurePlayer} />
       <Route path="/admin" component={AdminPanel} />
       <Route path="/view/:token" component={ProspectView} />
+      <Route path="/privacy" component={PrivacyPolicy} />
+      <Route path="/terms" component={TermsOfService} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
