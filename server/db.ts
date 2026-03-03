@@ -1,7 +1,17 @@
 import { eq, desc, sql, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
-import { InsertUser, users, demoLinks, linkViews, adminSessions, InsertDemoLink, InsertLinkView, InsertAdminSession } from "../drizzle/schema";
+import {
+  InsertUser,
+  users,
+  demoLinks,
+  linkViews,
+  adminSessions,
+  jobberTokens,
+  InsertDemoLink,
+  InsertLinkView,
+  InsertAdminSession,
+} from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -191,4 +201,96 @@ export async function cleanExpiredAdminSessions(): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db.delete(adminSessions).where(lt(adminSessions.expiresAt, Date.now()));
+}
+
+// ==================== Jobber Tokens ====================
+
+export async function saveJobberTokens(
+  accessToken: string,
+  refreshToken: string,
+  expiresInSeconds: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const now = Date.now();
+  // Subtract 60 seconds buffer to refresh before actual expiry
+  const expiresAt = now + (expiresInSeconds - 60) * 1000;
+
+  try {
+    // Delete any existing tokens (single-tenant: only one Jobber connection)
+    await db.delete(jobberTokens);
+
+    // Insert new tokens
+    await db.insert(jobberTokens).values({
+      accessToken,
+      refreshToken,
+      expiresAt,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    console.log("[Jobber] Tokens saved to database, expires at:", new Date(expiresAt).toISOString());
+  } catch (error) {
+    console.error("[Jobber] Failed to save tokens:", error);
+    throw error;
+  }
+}
+
+export async function getJobberTokens(): Promise<{
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+} | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const result = await db.select().from(jobberTokens).limit(1);
+    if (result.length === 0) return null;
+
+    return {
+      accessToken: result[0].accessToken,
+      refreshToken: result[0].refreshToken,
+      expiresAt: result[0].expiresAt,
+    };
+  } catch (error) {
+    console.error("[Jobber] Failed to get tokens:", error);
+    return null;
+  }
+}
+
+export async function deleteJobberTokens(): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  try {
+    await db.delete(jobberTokens);
+    console.log("[Jobber] Tokens deleted from database");
+  } catch (error) {
+    console.error("[Jobber] Failed to delete tokens:", error);
+    throw error;
+  }
+}
+
+export async function updateDemoLinkJobberSync(
+  token: string,
+  jobberClientId: string | null,
+  jobberQuoteId: string | null
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    await db.update(demoLinks)
+      .set({
+        jobberSynced: true,
+        jobberClientId,
+        jobberQuoteId,
+      })
+      .where(eq(demoLinks.token, token));
+  } catch (error) {
+    console.error("[Jobber] Failed to update demo link sync status:", error);
+    throw error;
+  }
 }

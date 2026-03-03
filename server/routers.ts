@@ -15,12 +15,25 @@ import {
   createAdminSession,
   getAdminSessionFromDb,
   deleteAdminSession,
+  getJobberTokens,
+  updateDemoLinkJobberSync,
 } from "./db";
+import {
+  checkJobberConnection,
+  createJobberClient,
+  createJobberQuote,
+  disconnectJobber,
+} from "./jobber";
 
 // Admin credentials — simple password-based auth for the BidSnap admin
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "bidsnap2025";
 const ADMIN_SESSION_KEY = "bidsnap_admin_session";
+
+// Jobber OAuth config
+const JOBBER_CLIENT_ID = process.env.JOBBER_CLIENT_ID || "1b27fc9b-f1c2-47d7-8ee3-454e1927afe1";
+const JOBBER_OAUTH_URL = "https://api.getjobber.com/api/oauth/authorize";
+const APP_URL = "https://bidsnap-app.vercel.app";
 
 // Helper to extract session ID from cookie header
 function getSessionIdFromCookie(req: any): string | null {
@@ -138,6 +151,9 @@ export const appRouter = router({
           status: "active",
           createdAt: now,
           expiresAt,
+          jobberSynced: false,
+          jobberClientId: null,
+          jobberQuoteId: null,
         });
 
         return { token, expiresAt };
@@ -262,6 +278,112 @@ export const appRouter = router({
           valid: true,
           prospectName: link.prospectName,
           companyName: link.companyName,
+        };
+      }),
+  }),
+
+  // ==================== Jobber Integration ====================
+  jobber: router({
+    /** Get the OAuth authorization URL to initiate the Jobber connection */
+    getAuthUrl: adminMiddleware.query(() => {
+      const params = new URLSearchParams({
+        response_type: "code",
+        client_id: JOBBER_CLIENT_ID,
+        redirect_uri: `${APP_URL}/api/jobber/callback`,
+      });
+      return { url: `${JOBBER_OAUTH_URL}?${params.toString()}` };
+    }),
+
+    /** Check if Jobber is connected and get account info */
+    status: adminMiddleware.query(async () => {
+      try {
+        // First check if we have tokens at all
+        const tokens = await getJobberTokens();
+        if (!tokens) {
+          return { connected: false, accountName: null, accountId: null };
+        }
+
+        // Then verify the connection is actually active
+        const result = await checkJobberConnection();
+        return {
+          connected: result.connected,
+          accountName: result.accountName || null,
+          accountId: result.accountId || null,
+        };
+      } catch (error) {
+        console.error("[Jobber] Status check error:", error);
+        return { connected: false, accountName: null, accountId: null };
+      }
+    }),
+
+    /** Disconnect from Jobber */
+    disconnect: adminMiddleware.mutation(async () => {
+      try {
+        await disconnectJobber();
+        return { success: true };
+      } catch (error) {
+        console.error("[Jobber] Disconnect error:", error);
+        throw new Error("Failed to disconnect from Jobber");
+      }
+    }),
+
+    /** Push a prospect to Jobber as a client and optionally create a quote */
+    syncProspect: adminMiddleware
+      .input(z.object({
+        token: z.string(),
+        /** Optional line items for creating a quote */
+        lineItems: z.array(z.object({
+          name: z.string(),
+          description: z.string().optional(),
+          quantity: z.number().default(1),
+          unitPrice: z.number(),
+        })).optional(),
+        /** Optional quote title */
+        quoteTitle: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        // Get the demo link data
+        const link = await getDemoLinkByToken(input.token);
+        if (!link) {
+          throw new Error("Demo link not found");
+        }
+
+        // Parse the prospect name into first/last
+        const nameParts = link.prospectName.trim().split(/\s+/);
+        const firstName = nameParts[0] || "Unknown";
+        const lastName = nameParts.slice(1).join(" ") || "Prospect";
+
+        // Create the client in Jobber
+        const client = await createJobberClient({
+          firstName,
+          lastName,
+          email: link.prospectEmail,
+          companyName: link.companyName || undefined,
+        });
+
+        let quoteId: string | null = null;
+        let quoteNumber: string | null = null;
+
+        // Create a quote if line items are provided
+        if (input.lineItems && input.lineItems.length > 0) {
+          const quoteResult = await createJobberQuote({
+            clientId: client.clientId,
+            title: input.quoteTitle || `Sealcoating Quote - ${link.prospectName}`,
+            lineItems: input.lineItems,
+          });
+          quoteId = quoteResult.quoteId;
+          quoteNumber = quoteResult.quoteNumber;
+        }
+
+        // Update the demo link with Jobber sync status
+        await updateDemoLinkJobberSync(input.token, client.clientId, quoteId);
+
+        return {
+          success: true,
+          clientId: client.clientId,
+          clientName: `${client.firstName} ${client.lastName}`,
+          quoteId,
+          quoteNumber,
         };
       }),
   }),

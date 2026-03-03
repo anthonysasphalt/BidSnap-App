@@ -1,22 +1,16 @@
 /**
  * Jobber OAuth Callback Handler
- * 
+ *
  * Handles the OAuth callback from Jobber's authorization flow.
- * Exchanges the authorization code for access and refresh tokens.
+ * Exchanges the authorization code for access and refresh tokens,
+ * then stores them in the database.
  */
 import "dotenv/config";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { exchangeCodeForTokens } from "./jobber";
+import { saveJobberTokens } from "./db";
 
-const JOBBER_CLIENT_ID = process.env.JOBBER_CLIENT_ID;
-const JOBBER_CLIENT_SECRET = process.env.JOBBER_CLIENT_SECRET;
-const JOBBER_TOKEN_ENDPOINT = "https://api.getjobber.com/api/oauth/token";
-
-interface JobberTokenResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
-}
+const APP_URL = "https://bidsnap-app.vercel.app";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -30,69 +24,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Check for OAuth errors from Jobber
     if (error) {
       console.error("[Jobber OAuth] Error from Jobber:", error, error_description);
-      return res.status(400).json({
-        error: String(error),
-        description: String(error_description),
-      });
+      return res.redirect(302, `${APP_URL}/admin?jobber=error&message=${encodeURIComponent(String(error_description || error))}`);
     }
 
     // Validate required parameters
     if (!code) {
       console.error("[Jobber OAuth] Missing authorization code");
-      return res.status(400).json({ error: "Missing authorization code" });
+      return res.redirect(302, `${APP_URL}/admin?jobber=error&message=Missing+authorization+code`);
     }
+
+    const JOBBER_CLIENT_ID = process.env.JOBBER_CLIENT_ID;
+    const JOBBER_CLIENT_SECRET = process.env.JOBBER_CLIENT_SECRET;
 
     if (!JOBBER_CLIENT_ID || !JOBBER_CLIENT_SECRET) {
       console.error("[Jobber OAuth] Missing environment variables");
-      return res.status(500).json({ error: "Server configuration error" });
+      return res.redirect(302, `${APP_URL}/admin?jobber=error&message=Server+configuration+error`);
     }
 
     // Exchange authorization code for tokens
-    console.log("[Jobber OAuth] Exchanging code for tokens...");
-    const tokenResponse = await fetch(JOBBER_TOKEN_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code: String(code),
-        client_id: JOBBER_CLIENT_ID,
-        client_secret: JOBBER_CLIENT_SECRET,
-        redirect_uri: `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/api/jobber/callback`,
-      }).toString(),
-    });
+    const redirectUri = `${APP_URL}/api/jobber/callback`;
+    const tokens = await exchangeCodeForTokens(String(code), redirectUri);
 
-    if (!tokenResponse.ok) {
-      const errorData = await tokenResponse.text();
-      console.error("[Jobber OAuth] Token exchange failed:", tokenResponse.status, errorData);
-      return res.status(tokenResponse.status).json({
-        error: "Token exchange failed",
-        details: errorData,
-      });
-    }
+    // Store tokens in the database
+    await saveJobberTokens(tokens.accessToken, tokens.refreshToken, tokens.expiresIn);
 
-    const tokens: JobberTokenResponse = await tokenResponse.json();
-
-    console.log("[Jobber OAuth] Token exchange successful");
-    console.log("[Jobber OAuth] Access token received (expires in", tokens.expires_in, "seconds)");
-
-    // TODO: Store tokens securely in database
-    // For now, we'll just log them and return success
-    // In production, you would:
-    // 1. Store tokens in a secure database with encryption
-    // 2. Associate with admin user session
-    // 3. Set up token refresh mechanism
+    console.log("[Jobber OAuth] Successfully connected and tokens stored");
 
     // Redirect back to admin panel with success message
-    const adminUrl = `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"}/admin?jobber=connected`;
-    
-    return res.redirect(302, adminUrl);
-  } catch (error) {
+    return res.redirect(302, `${APP_URL}/admin?jobber=connected`);
+  } catch (error: any) {
     console.error("[Jobber OAuth] Unexpected error:", error);
-    res.status(500).json({
-      error: "Internal server error",
-      message: error instanceof Error ? error.message : String(error),
-    });
+    const message = error instanceof Error ? error.message : String(error);
+    return res.redirect(302, `${APP_URL}/admin?jobber=error&message=${encodeURIComponent(message)}`);
   }
 }

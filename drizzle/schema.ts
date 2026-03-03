@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, bigint } from "drizzle-orm/mysql-core";
+import { boolean, int, mysqlEnum, mysqlTable, text, timestamp, varchar, bigint } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -43,6 +43,12 @@ export const demoLinks = mysqlTable("demo_links", {
   createdAt: bigint("createdAt", { mode: "number" }).notNull(),
   /** When the link expires (ms since epoch) */
   expiresAt: bigint("expiresAt", { mode: "number" }).notNull(),
+  /** Whether this prospect's data has been pushed to Jobber */
+  jobberSynced: boolean("jobberSynced").default(false).notNull(),
+  /** Jobber client ID returned after clientCreate */
+  jobberClientId: varchar("jobberClientId", { length: 255 }),
+  /** Jobber quote ID returned after quoteCreate */
+  jobberQuoteId: varchar("jobberQuoteId", { length: 255 }),
 });
 
 export type DemoLink = typeof demoLinks.$inferSelect;
@@ -83,3 +89,24 @@ export const adminSessions = mysqlTable("admin_sessions", {
 
 export type AdminSession = typeof adminSessions.$inferSelect;
 export type InsertAdminSession = typeof adminSessions.$inferInsert;
+
+/**
+ * Jobber OAuth tokens — stores the access and refresh tokens for Jobber API
+ * Only one row should exist (single-tenant: Anthony's Jobber account)
+ */
+export const jobberTokens = mysqlTable("jobber_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Jobber OAuth access token (JWT) */
+  accessToken: text("accessToken").notNull(),
+  /** Jobber OAuth refresh token */
+  refreshToken: text("refreshToken").notNull(),
+  /** When the access token expires (ms since epoch) */
+  expiresAt: bigint("expiresAt", { mode: "number" }).notNull(),
+  /** When the row was created (ms since epoch) */
+  createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+  /** When the row was last updated (ms since epoch) */
+  updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+});
+
+export type JobberToken = typeof jobberTokens.$inferSelect;
+export type InsertJobberToken = typeof jobberTokens.$inferInsert;
