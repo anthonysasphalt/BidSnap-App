@@ -6,7 +6,7 @@
 
 import { getJobberTokens, saveJobberTokens, deleteJobberTokens } from "./db";
 
-const JOBBER_CLIENT_ID = process.env.JOBBER_CLIENT_ID || "";
+const JOBBER_CLIENT_ID = process.env.JOBBER_CLIENT_ID || "1b27fc9b-f1c2-47d7-8ee3-454e1927afe1";
 const JOBBER_CLIENT_SECRET = process.env.JOBBER_CLIENT_SECRET || "";
 const JOBBER_TOKEN_ENDPOINT = "https://api.getjobber.com/api/oauth/token";
 const JOBBER_GRAPHQL_ENDPOINT = "https://api.getjobber.com/api/graphql";

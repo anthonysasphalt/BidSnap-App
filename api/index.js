@@ -65683,7 +65683,7 @@ async function updateDemoLinkJobberSync(token, jobberClientId, jobberQuoteId) {
 }
 
 // server/jobber.ts
-var JOBBER_CLIENT_ID = process.env.JOBBER_CLIENT_ID || "";
+var JOBBER_CLIENT_ID = process.env.JOBBER_CLIENT_ID || "1b27fc9b-f1c2-47d7-8ee3-454e1927afe1";
 var JOBBER_CLIENT_SECRET = process.env.JOBBER_CLIENT_SECRET || "";
 var JOBBER_TOKEN_ENDPOINT = "https://api.getjobber.com/api/oauth/token";
 var JOBBER_GRAPHQL_ENDPOINT = "https://api.getjobber.com/api/graphql";
